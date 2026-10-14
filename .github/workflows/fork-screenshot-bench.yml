@@ -6,6 +6,40 @@ on:
   workflow_dispatch:
 
 jobs:
+  windows-tests:
+    runs-on: windows-2022
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Rust toolchain
+        shell: bash
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal --component clippy
+          rustup toolchain install 1.88.0 --profile minimal
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop-gpui -> target
+          cache-on-failure: true
+
+      - name: Native dependencies
+        shell: bash
+        run: node scripts/setup.js
+
+      - name: Prepare GPUI
+        shell: bash
+        run: ./scripts/prepare-gpui-dependency.sh
+
+      - name: Compile GPUI tests
+        shell: bash
+        working-directory: apps/desktop-gpui
+        run: cargo +1.95.0 test --locked --bin cap-gpui --no-run
+
   bench:
     runs-on: macos-latest
     timeout-minutes: 180
