@@ -1,0 +1,65 @@
+name: Fork screenshot annotation bench
+
+on:
+  push:
+    branches: [perf/screenshot-annotation-renders]
+  workflow_dispatch:
+
+jobs:
+  bench:
+    runs-on: macos-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Rust toolchain
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal --component rustfmt,clippy
+          rustup toolchain install 1.88.0 --profile minimal
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop-gpui -> target
+          cache-on-failure: true
+
+      - name: Native dependencies
+        run: node scripts/setup.js
+
+      - name: Build GPUI desktop
+        run: ./scripts/build-gpui-binary.sh debug
+
+      - name: Link frameworks
+        run: |
+          frameworks="$GITHUB_WORKSPACE/apps/desktop-gpui/target/debug/Frameworks"
+          mkdir -p "$frameworks"
+          ln -sfn "$GITHUB_WORKSPACE/target/Frameworks/Spacedrive.framework" "$frameworks/Spacedrive.framework"
+
+      - name: rustfmt
+        working-directory: apps/desktop-gpui
+        run: cargo +1.95.0 fmt --check
+
+      - name: GPUI tests
+        working-directory: apps/desktop-gpui
+        run: |
+          cargo +1.95.0 test --locked --bin cap-gpui
+          cargo +1.95.0 test --locked -p cap-gpui-kernels
+
+      - name: Benchmark annotation slider drag
+        working-directory: apps/desktop-gpui
+        run: |
+          system_profiler SPDisplaysDataType | sed -n 1,12p
+          sysctl -n machdep.cpu.brand_string hw.ncpu
+          for run in 1 2 3; do
+            echo "### run $run" | tee -a bench.md
+            cargo +1.95.0 test --locked --bin cap-gpui benchmark_annotation_slider_drag -- --ignored --nocapture 2>&1 | tee run.log
+            grep '^|' run.log >> bench.md
+          done
+          cat bench.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Clippy
+        working-directory: apps/desktop-gpui
+        run: cargo +1.95.0 clippy --locked --bin cap-gpui --all-targets -- -D warnings
