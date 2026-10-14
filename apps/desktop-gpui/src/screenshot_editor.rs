@@ -5143,7 +5143,9 @@ mod tests {
 
         let renders = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let render_ms = Arc::new(std::sync::Mutex::new(Vec::new()));
-        let sent_at = Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
+        let sent_at = Arc::new(std::sync::Mutex::new(
+            HashMap::<u64, std::time::Instant>::new(),
+        ));
         let pump = {
             let (renders, render_ms, sent_at) =
                 (renders.clone(), render_ms.clone(), sent_at.clone());
